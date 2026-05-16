@@ -52,6 +52,10 @@ def _normalize_harness(value: str) -> str:
         "deepagent": "DeepAgent",
         "claudecode": "ClaudeCode",
         "claude-code": "ClaudeCode",
+        "yiyi": "YiYiOpenDataBox",
+        "yiyi-opendatabox": "YiYiOpenDataBox",
+        "yiyiopendatabox": "YiYiOpenDataBox",
+        "opendatabox": "YiYiOpenDataBox",
     }
     key = value.strip().lower()
     if key not in mapping:
@@ -72,6 +76,15 @@ def _model_info(model: str, model_id: str | None, model_name: str | None, env_pr
 
 
 def _provider_config(harness: str, provider_type: str, env_prefix: str, llm_model: str) -> dict[str, str]:
+    if harness == "YiYiOpenDataBox":
+        return {
+            "provider_type": "yiyi-opendatabox",
+            "model": llm_model,
+            "projectRoot": "${YIYI_OPENDATABOX_PROJECT_ROOT:-${OPENDATABOX_PROJECT_ROOT}}",
+            "cargoRoot": "${YIYI_CARGO_ROOT}",
+            "evalBin": "${YIYI_EVAL_BIN}",
+            "homeYiyi": "${YIYI_HOME}",
+        }
     if harness == "ClaudeCode" or provider_type == "anthropic":
         return {
             "provider_type": "anthropic",
@@ -87,12 +100,21 @@ def _provider_config(harness: str, provider_type: str, env_prefix: str, llm_mode
     }
 
 
-def _fs_map(eval_root: Path, harness: str, model_name: str) -> dict[str, dict[str, str]]:
+def _fs_map(
+    eval_root: Path,
+    harness: str,
+    model_name: str,
+    *,
+    filesys_root: Path | None = None,
+    reuse_workdir_suffix: str | None = None,
+) -> dict[str, dict[str, str]]:
     suffix = f"{harness}_{_display_slug(model_name)}"
+    fs_root = (filesys_root or (eval_root / "filesys")).resolve()
+    work_suffix = reuse_workdir_suffix or suffix
     return {
-        "raw_work_dir": {role: f"filesys/{prefix}_raw" for role, prefix in ROLE_DIRS.items()},
-        "standard_work_dir": {role: f"filesys/{prefix}_standard" for role, prefix in ROLE_DIRS.items()},
-        "work_dir": {role: f"filesys/{prefix}_workdir_{suffix}" for role, prefix in ROLE_DIRS.items()},
+        "raw_work_dir": {role: str(fs_root / f"{prefix}_raw") for role, prefix in ROLE_DIRS.items()},
+        "standard_work_dir": {role: str(fs_root / f"{prefix}_standard") for role, prefix in ROLE_DIRS.items()},
+        "work_dir": {role: str(fs_root / f"{prefix}_workdir_{work_suffix}") for role, prefix in ROLE_DIRS.items()},
     }
 
 
@@ -111,7 +133,8 @@ def build_config(args: argparse.Namespace) -> Path:
         raise SystemExit(f"unsupported dataset: {args.dataset}")
 
     run_name = args.run_name or {"smoke": "Smoke", "lite": "Lite", "full": "Full"}[dataset]
-    task_path = eval_root / ("tasks" if dataset == "full" else "tasks_lite")
+    data_root = Path(args.data_root).resolve() if args.data_root else eval_root
+    task_path = data_root / ("tasks" if dataset == "full" else "tasks_lite")
     task_limit = args.task_limit
     if task_limit is None and dataset == "smoke":
         task_limit = 1
@@ -125,7 +148,18 @@ def build_config(args: argparse.Namespace) -> Path:
     config_slug = f"{harness.lower()}-{_safe_slug(args.model)}-{dataset}"
     fs_map_path = fs_map_dir / f"fs_map_{harness}_{_display_slug(model_name)}.json"
     fs_map_path.write_text(
-        json.dumps(_fs_map(eval_root, harness, model_name), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(
+            _fs_map(
+                eval_root,
+                harness,
+                model_name,
+                filesys_root=Path(args.filesys_root).resolve() if args.filesys_root else (data_root / "filesys"),
+                reuse_workdir_suffix=args.reuse_workdir_suffix,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -154,10 +188,13 @@ def build_config(args: argparse.Namespace) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build a Workspace-Bench run config from parameters.")
-    parser.add_argument("--harness", required=True, help="Codex, OpenClaw, DeepAgent, or ClaudeCode")
+    parser.add_argument("--harness", required=True, help="Codex, OpenClaw, DeepAgent, ClaudeCode, or YiYiOpenDataBox")
     parser.add_argument("--model", required=True, help="Model alias or custom model id")
     parser.add_argument("--dataset", default="lite", choices=["smoke", "lite", "full"])
     parser.add_argument("--eval-root", default=str(Path(__file__).resolve().parents[1]))
+    parser.add_argument("--data-root", help="Directory containing Workspace-Bench tasks/tasks_lite and filesys; defaults to --eval-root")
+    parser.add_argument("--filesys-root", help="Override filesys directory; defaults to DATA_ROOT/filesys")
+    parser.add_argument("--reuse-workdir-suffix", help="Reuse an existing filesys workdir suffix, e.g. Codex_GPT-5.4")
     parser.add_argument("--provider-type", default="openai", choices=["openai", "anthropic"])
     parser.add_argument("--model-id", help="LLM provider model id; defaults from --model")
     parser.add_argument("--model-name", help="Display name used in output directory")

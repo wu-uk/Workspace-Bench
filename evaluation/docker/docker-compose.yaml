@@ -19,8 +19,21 @@ services:
       RIP_BENCH_EVAL_ROOT: /workspace/Workspace-Bench/evaluation
       DEEPAGENTS_ROOT: /workspace/Workspace-Bench/deepagents
       CODEX_SANDBOX_MODE: danger-full-access
+      YIYI_OPENDATABOX_PROJECT_ROOT: /workspace/OpenDataBox
+      OPENDATABOX_PROJECT_ROOT: /workspace/OpenDataBox
+      YIYI_CARGO_ROOT: /workspace/OpenDataBox/YiYi/app/src-tauri
+      YIYI_DOCKER_TARGET_DIR: /workspace/.cargo-target/yiyi
+      YIYI_EVAL_BIN: /workspace/.cargo-target/yiyi/debug/eval
+      YIYI_HOME: /root/.yiyi
+      WORKSPACE_BENCH_EXTERNAL_DATA_ROOT: /workspace/tmp-workspace-bench-evaluation
     volumes:
       - ../..:/workspace/Workspace-Bench
+      - ../../..:/workspace/OpenDataBox
+      - ${WORKSPACE_BENCH_DATA_ROOT:-/home/yukai/project/tmp/Workspace-Bench/evaluation}:/workspace/tmp-workspace-bench-evaluation
+      - ${YIYI_HOME_HOST:-${HOME}/.yiyi}:/root/.yiyi:ro
+      - cargo-cache:/root/.cargo
+      - rustup-cache:/root/.rustup
+      - cargo-target:/workspace/.cargo-target
       - pip-cache:/root/.cache/pip
       - uv-cache:/root/.cache/uv
       - npm-cache:/root/.npm
@@ -31,3 +44,6 @@ volumes:
   uv-cache:
   npm-cache:
   openclaw-home:
+  cargo-cache:
+  rustup-cache:
+  cargo-target:
