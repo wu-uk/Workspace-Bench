@@ -331,7 +331,19 @@ def run(
         os.path.abspath(work_dir),
         "--output-dir",
         os.path.abspath(output_dir),
+        "--prompt",
+        str(prompt or ""),
     ]
+    expected = api_provider.get("__expected_output_files__")
+    if isinstance(expected, list):
+        for f in expected:
+            if isinstance(f, str) and f.strip():
+                cmd.extend(["--expected-output", f.strip()])
+
+    mode = api_provider.get("mode")
+    if isinstance(mode, str) and mode.strip().lower() == "three_phase":
+        cmd.extend(["--mode", "three_phase"])
+
     yiyi_working_dir = _prepare_yiyi_working_dir(task_id, api_provider)
 
     _write_json(
