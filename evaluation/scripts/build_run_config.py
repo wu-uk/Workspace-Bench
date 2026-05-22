@@ -178,6 +178,12 @@ def build_config(args: argparse.Namespace) -> Path:
         "eval_yaml": args.eval_yaml,
         "api_provider": _provider_config(harness, args.provider_type, env_prefix, llm_model),
     }
+    if harness == "YiYiOpenDataBox" and (args.phase3_skill_dir or args.phase3_skill):
+        config["api_provider"]["mode"] = "three_phase"
+    if harness == "YiYiOpenDataBox" and args.phase3_skill_dir:
+        config["api_provider"]["phase3SkillDir"] = str(Path(args.phase3_skill_dir).resolve())
+    if harness == "YiYiOpenDataBox" and args.phase3_skill:
+        config["api_provider"]["phase3Skills"] = args.phase3_skill
     if task_limit is not None:
         config["task_limit"] = int(task_limit)
 
@@ -203,6 +209,8 @@ def main() -> None:
     parser.add_argument("--task-limit", type=int)
     parser.add_argument("--timeout-sec", type=float, default=2000.0)
     parser.add_argument("--eval-yaml", default="runs/judge.yaml")
+    parser.add_argument("--phase3-skill-dir", help="YiYi three-phase mode: directory containing curated skill folders")
+    parser.add_argument("--phase3-skill", action="append", default=[], help="YiYi three-phase mode: explicitly load this skill in the generation stage; can be repeated")
     args = parser.parse_args()
     print(build_config(args))
 

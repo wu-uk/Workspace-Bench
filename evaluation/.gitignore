@@ -8,6 +8,8 @@ logs/
 output/
 tasks/
 tasks_lite/
+tasks_full_minus_lite/
+tasks_full_minus_lite_manifest.json
 !tasks/README.md
 !tasks_lite/README.md
 tmp/

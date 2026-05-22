@@ -20,7 +20,14 @@ Json = Any
 """
 agent_eval.py
 
-本文件用于对“单个任务执行结果目录”进行离线评测与结构化产物生成，主要做两件事：
+DEPRECATED：本文件不再作为评测入口使用。
+
+新的 rubric 评测必须通过 agent_as_a_judge.py 执行。agent_as_a_judge 会启动
+ClaudeCode/Anthropic 兼容 agent 进入 Docker 内的任务产物目录，自主检查文件系统和
+输出文件。当前文件仅保留一部分 metadata、trace、dependency graph 辅助函数，供
+agent_as_a_judge.py 复用。
+
+旧实现曾用于对“单个任务执行结果目录”做离线评测与结构化产物生成，主要做两件事：
 
 1) rubric 评测（LLM-as-a-judge）
    - 输入：task_dir 下的 metadata.json（包含 rubrics）、执行 trace（agent.json/result.json/session.jsonl 等）、以及工作目录/输出文件摘录
@@ -1600,54 +1607,9 @@ def evaluate_task_dir(
 
 
 if __name__ == "__main__":
-    import argparse
-    
-    p = argparse.ArgumentParser(description="Evaluate a single task execution result")
-    p.add_argument("--task-dir", required=True, help="Path to task execution result directory")
-    p.add_argument("--eval-yaml", required=True, help="Path to eval LLM YAML config file")
-    p.add_argument("--overwrite", action="store_true", help="Overwrite existing evaluation results")
-    p.add_argument("--max-retries", type=int, default=6, help="Max retries for LLM API calls")
-    p.add_argument("--max-str-len", type=int, default=2000, help="Max length for each string field in prompt")
-    p.add_argument("--max-trace-items", type=int, default=30, help="Max items in each trace list")
-    p.add_argument("--max-output-files", type=int, default=10, help="Max output files to include in prompt")
-    args = p.parse_args()
-    
-    # 遍历 task_dir 下每一个子目录进行评估
-    task_dirs = []
-    if os.path.isdir(args.task_dir):
-        for entry in os.listdir(args.task_dir):
-            entry_path = os.path.join(args.task_dir, entry)
-            if os.path.isdir(entry_path):
-                # 检查是否为有效的任务目录（包含 metadata.json）
-                metadata_path = os.path.join(entry_path, "metadata.json")
-                if os.path.isfile(metadata_path):
-                    task_dirs.append(entry_path)
-    
-    # 如果没有找到子任务目录，则将当前目录作为任务目录
-    if not task_dirs:
-        task_dirs = [args.task_dir]
-    
-    all_results = []
-    for single_task_dir in tqdm(task_dirs):
-        print(f"Evaluating task: {single_task_dir}", file=sys.stderr)
-        result = evaluate_task(
-            task_dir=single_task_dir,
-            eval_yaml_path=args.eval_yaml,
-            overwrite=args.overwrite,
-            max_retries=args.max_retries,
-            max_str_len=args.max_str_len,
-            max_trace_items=args.max_trace_items,
-            max_output_files=args.max_output_files,
-        )
-        all_results.append(result)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    
-    # 如果有多个任务，输出汇总结果
-    if len(all_results) > 1:
-        summary = {
-            "totalTasks": len(all_results),
-            "successful": len([r for r in all_results if r.get("success")]),
-            "failed": len([r for r in all_results if not r.get("success")]),
-            "results": all_results,
-        }
-        print(json.dumps(summary, ensure_ascii=False, indent=2), file=sys.stderr)
+    print(
+        "agent_eval.py 已废弃。请使用 agent_as_a_judge.py：\n"
+        "  python3 src/agent_as_a_judge.py --task-dir <run_or_task_dir> --eval-yaml runs/judge.yaml --overwrite",
+        file=sys.stderr,
+    )
+    sys.exit(2)

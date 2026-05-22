@@ -615,6 +615,7 @@ def _run_one_case(
     exec_from_agent = trace_obj.get("executionTrace") if isinstance(trace_obj.get("executionTrace"), list) else None
     llm_from_agent = trace_obj.get("llm") if isinstance(trace_obj.get("llm"), dict) else None
     usage_total_from_agent = trace_obj.get("usageTotal") if isinstance(trace_obj.get("usageTotal"), dict) else None
+    read_files_from_agent = trace_obj.get("readFiles") if isinstance(trace_obj.get("readFiles"), list) else []
 
     with open(os.path.join(case_dir, "agent.log"), "w", encoding="utf-8") as f:
         f.write(f"agent={agent_name} model={model_name}\n")
@@ -655,6 +656,7 @@ def _run_one_case(
                 "returnedPaths": returned_paths_rel,
                 "retrievalMethod": retrieval_method,
                 "outputManifest": manifest,
+                "readFiles": [x for x in read_files_from_agent if isinstance(x, dict)],
             },
             "raw": {"stdout": stdout_txt, "stderr": stderr_txt},
         },

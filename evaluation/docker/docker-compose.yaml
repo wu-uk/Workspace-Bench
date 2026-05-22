@@ -24,6 +24,7 @@ services:
       YIYI_CARGO_ROOT: /workspace/OpenDataBox/YiYi/app/src-tauri
       YIYI_DOCKER_TARGET_DIR: /workspace/.cargo-target/yiyi
       YIYI_EVAL_BIN: /workspace/.cargo-target/yiyi/debug/eval
+      YIYI_PREPROCESS_BIN: /workspace/.cargo-target/yiyi/debug/preprocess
       YIYI_HOME: /root/.yiyi
       WORKSPACE_BENCH_EXTERNAL_DATA_ROOT: /workspace/tmp-workspace-bench-evaluation
     volumes:
