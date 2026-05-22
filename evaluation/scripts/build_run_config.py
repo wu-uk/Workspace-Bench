@@ -80,6 +80,7 @@ def _provider_config(harness: str, provider_type: str, env_prefix: str, llm_mode
         return {
             "provider_type": "yiyi-opendatabox",
             "model": llm_model,
+            "mode": "three_phase",
             "projectRoot": "${YIYI_OPENDATABOX_PROJECT_ROOT:-${OPENDATABOX_PROJECT_ROOT}}",
             "cargoRoot": "${YIYI_CARGO_ROOT}",
             "evalBin": "${YIYI_EVAL_BIN}",
@@ -178,8 +179,6 @@ def build_config(args: argparse.Namespace) -> Path:
         "eval_yaml": args.eval_yaml,
         "api_provider": _provider_config(harness, args.provider_type, env_prefix, llm_model),
     }
-    if harness == "YiYiOpenDataBox" and (args.phase3_skill_dir or args.phase3_skill):
-        config["api_provider"]["mode"] = "three_phase"
     if harness == "YiYiOpenDataBox" and args.phase3_skill_dir:
         config["api_provider"]["phase3SkillDir"] = str(Path(args.phase3_skill_dir).resolve())
     if harness == "YiYiOpenDataBox" and args.phase3_skill:
