@@ -257,27 +257,22 @@ def _resolve_under(root: str, p: str) -> Optional[str]:
     return None
 
 
-def _collect_outputs(output_dir: str, expected_files: List[str]) -> List[str]:
+def _collect_outputs(output_dir: str) -> List[str]:
     if not os.path.isdir(output_dir):
         return []
 
-    skipped = {"trace.txt", "trace.json"}
+    skipped = {
+        "trace.txt",
+        "trace.json",
+        "phase1_file_discovery.md",
+        "phase1_files.json",
+        "phase2_data_summary.md",
+    }
     skipped_suffixes = (".bak", ".tmp", ".log")
-    expected = [os.path.basename(str(x)) for x in expected_files if isinstance(x, str) and str(x).strip()]
     found: List[str] = []
 
-    if expected:
-        want = set(expected)
-        for root, _, files in os.walk(output_dir):
-            for name in files:
-                if name in skipped:
-                    continue
-                if name in want:
-                    found.append(os.path.abspath(os.path.join(root, name)))
-        if found:
-            return sorted(set(found))
-
-    for root, _, files in os.walk(output_dir):
+    for root, dirs, files in os.walk(output_dir):
+        dirs[:] = [d for d in dirs if d != ".workspace_data"]
         for name in files:
             if name in skipped:
                 continue
@@ -299,6 +294,65 @@ def _move_trace_files(output_dir: str, raw_dir: str) -> None:
             shutil.move(src, dst)
         except Exception:
             pass
+
+
+def _move_workspace_data(output_dir: str, raw_dir: str) -> Optional[str]:
+    src = os.path.join(output_dir, ".workspace_data")
+    if not os.path.isdir(src):
+        return None
+    dst = os.path.join(raw_dir, "workspace_data")
+    try:
+        if os.path.exists(dst):
+            shutil.rmtree(dst, ignore_errors=True)
+        shutil.move(src, dst)
+        return dst
+    except Exception:
+        return None
+
+
+def _workspace_data_summary(raw_dir: str) -> Dict[str, Json]:
+    root = os.path.join(raw_dir, "workspace_data")
+    out: Dict[str, Json] = {
+        "available": os.path.isdir(root),
+        "dir": root if os.path.isdir(root) else None,
+    }
+    if not os.path.isdir(root):
+        return out
+
+    files = {
+        "taskContractPath": "task_contract.json",
+        "sourceBindingsPath": "source_bindings.json",
+        "dataStatePath": "data_state.json",
+        "artifactContractPath": "artifact_contract.json",
+        "validationReportPath": "validation_report.json",
+        "preGenerationValidationReportPath": "pre_generation_validation_report.json",
+    }
+    for key, name in files.items():
+        path = os.path.join(root, name)
+        if os.path.isfile(path):
+            out[key] = path
+
+    try:
+        data_state = _read_json(os.path.join(root, "data_state.json")) if os.path.isfile(os.path.join(root, "data_state.json")) else None
+    except Exception:
+        data_state = None
+    if isinstance(data_state, dict):
+        out["canGenerate"] = data_state.get("can_generate")
+        gaps = data_state.get("gaps")
+        if isinstance(gaps, list):
+            out["gaps"] = gaps
+
+    try:
+        validation = _read_json(os.path.join(root, "validation_report.json")) if os.path.isfile(os.path.join(root, "validation_report.json")) else None
+    except Exception:
+        validation = None
+    if isinstance(validation, dict):
+        out["validationResult"] = validation.get("result")
+        out["validationFault"] = validation.get("fault")
+        missing = validation.get("missing")
+        if isinstance(missing, list):
+            out["validationMissing"] = missing
+    return out
 
 
 def _trace_entries_from_yiyi(raw_dir: str, *, prompt: str, started_at: float, model: Optional[str]) -> Dict[str, Json]:
@@ -510,7 +564,10 @@ def run(
     project_root = _project_root(api_provider)
     cargo_root = _cargo_root(project_root, api_provider)
     task_dir = _metadata_task_dir(sandbox_dir)
+    staged_task_data = {"available": False, "copied": 0, "aliases": 0, "disabled": True}
     output_dir = os.path.join(os.path.abspath(work_dir), "model_output")
+    if os.path.isdir(output_dir):
+        shutil.rmtree(output_dir, ignore_errors=True)
     _ensure_dir(output_dir)
 
     cmd = _eval_cmd(cargo_root, api_provider) + [
@@ -523,12 +580,6 @@ def run(
         "--prompt",
         str(prompt or ""),
     ]
-    expected = api_provider.get("__expected_output_files__")
-    if isinstance(expected, list):
-        for f in expected:
-            if isinstance(f, str) and f.strip():
-                cmd.extend(["--expected-output", f.strip()])
-
     mode = api_provider.get("mode")
     if isinstance(mode, str) and mode.strip().lower() == "three_phase":
         cmd.extend(["--mode", "three_phase"])
@@ -540,6 +591,9 @@ def run(
             for skill in skills:
                 if isinstance(skill, str) and skill.strip():
                     cmd.extend(["--phase3-skill", skill.strip()])
+        guider_dir = _configured_str(api_provider.get("guiderSnapshotDir")) or _configured_str(api_provider.get("guider_snapshot_dir"))
+        if guider_dir:
+            cmd.extend(["--guider-snapshot-dir", os.path.abspath(guider_dir)])
 
     yiyi_working_dir = _prepare_yiyi_working_dir(task_id, api_provider)
     yiyi_venv_python = _prepare_python_venv(task_id, yiyi_working_dir, api_provider)
@@ -620,6 +674,7 @@ def run(
             "outputDir": os.path.abspath(output_dir),
             "yiyiWorkingDir": yiyi_working_dir,
             "yiyiVenvPython": yiyi_venv_python,
+            "stagedTaskData": staged_task_data,
             "agentId": agent_id,
         },
     )
@@ -659,6 +714,7 @@ def run(
         exit_code = 1
     finally:
         _move_trace_files(output_dir, raw_dir)
+        _move_workspace_data(output_dir, raw_dir)
         if str(os.environ.get("YIYI_KEEP_EVAL_TMP") or "").strip().lower() not in {"1", "true", "yes", "on"}:
             shutil.rmtree(yiyi_working_dir, ignore_errors=True)
 
@@ -671,11 +727,10 @@ def run(
         with open(os.path.join(raw_dir, name), "w", encoding="utf-8") as f:
             f.write(text)
 
-    expected = api_provider.get("__expected_output_files__")
-    expected_files = expected if isinstance(expected, list) else []
-    paths = _collect_outputs(output_dir, expected_files)
+    paths = _collect_outputs(output_dir)
     trace_core = _trace_entries_from_yiyi(raw_dir, prompt=prompt, started_at=started_at, model=_model_label(api_provider))
     read_files = _collect_read_files(raw_dir, work_dir=work_dir)
+    workspace_data = _workspace_data_summary(raw_dir)
     _write_json(os.path.join(raw_dir, "read_files.json"), read_files)
 
     if exit_code == 124:
@@ -710,6 +765,7 @@ def run(
             "usageTotal": usage_total,
             "outputDir": os.path.abspath(output_dir),
             "readFiles": read_files,
+            "workspaceData": workspace_data,
         },
         "metrics": metrics,
         "durationMs": int((time.time() - started_at) * 1000),
